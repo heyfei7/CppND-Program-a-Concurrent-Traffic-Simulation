@@ -40,6 +40,10 @@ void TrafficLight::waitForGreen()
     // FP.5b : add the implementation of the method waitForGreen, in which an infinite while-loop 
     // runs and repeatedly calls the receive function on the message queue. 
     // Once it receives TrafficLightPhase::green, the method returns.
+    if (getCurrentPhase() == TrafficLightPhase::green)
+    {
+        return;
+    }
     while (true)
     {
         TrafficLightPhase phase = _queue.receive();
@@ -64,9 +68,9 @@ void TrafficLight::simulate()
 // virtual function which is executed in a thread
 void TrafficLight::cycleThroughPhases()
 {
-    std::default_random_engine generator;
-    std::uniform_int_distribution<int> distribution(4,6);
-    auto dice = std::bind ( distribution, generator );
+    std::minstd_rand generator;
+    std::uniform_int_distribution<int> dist(4,6);
+    auto dice = std::bind ( dist, generator );
     std::chrono::seconds cycleDuration(dice());
     std::chrono::milliseconds delta;
 
@@ -82,19 +86,19 @@ void TrafficLight::cycleThroughPhases()
         currentTime = std::chrono::steady_clock::now();
         delta = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - cycleStart);
         if (delta >= cycleDuration)
-        {
+        {            
             if (getCurrentPhase() == TrafficLightPhase::green)
             {
                 _currentPhase = TrafficLightPhase::red;
             }
             else
             {
-                _currentPhase = TrafficLightPhase::green;           
+                _currentPhase = TrafficLightPhase::green;
             }
             _queue.send(std::move(_currentPhase));
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
             cycleDuration = std::chrono::seconds(dice());
             cycleStart = std::chrono::steady_clock::now();
         }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 }
