@@ -10,7 +10,12 @@ T MessageQueue<T>::receive()
 {
     // FP.5a : The method receive should use std::unique_lock<std::mutex> and _condition.wait() 
     // to wait for and receive new messages and pull them from the queue using move semantics. 
-    // The received object should then be returned by the receive function. 
+    // The received object should then be returned by the receive function.
+    std::unique_lock<std::mutex> _lock(_mutex);
+    _condition.wait(_lock, [this] { return !_queue.empty(); });
+    T msg = std::move(_queue.front());
+    _queue.pop_front();
+    return msg;
 }
 
 template <typename T>
@@ -18,7 +23,9 @@ void MessageQueue<T>::send(T &&msg)
 {
     // FP.4a : The method send should use the mechanisms std::lock_guard<std::mutex> 
     // as well as _condition.notify_one() to add a new message to the queue and afterwards send a notification.
-
+    std::lock_guard<std::mutex> _lock(_mutex);
+    _queue.push_back(std::move(msg));
+    _condition.notify_one();
 }
 
 /* Implementation of class "TrafficLight" */
@@ -33,6 +40,14 @@ void TrafficLight::waitForGreen()
     // FP.5b : add the implementation of the method waitForGreen, in which an infinite while-loop 
     // runs and repeatedly calls the receive function on the message queue. 
     // Once it receives TrafficLightPhase::green, the method returns.
+    while (true)
+    {
+        TrafficLightPhase phase = _queue.receive();
+        if (phase == TrafficLightPhase::green)
+        {
+            return;
+        }
+    }
 }
 
 TrafficLightPhase TrafficLight::getCurrentPhase()
@@ -74,9 +89,9 @@ void TrafficLight::cycleThroughPhases()
             }
             else
             {
-                _currentPhase = TrafficLightPhase::green;            
+                _currentPhase = TrafficLightPhase::green;           
             }
-            // TODO: updates
+            _queue.send(std::move(_currentPhase));
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
             cycleDuration = std::chrono::seconds(dice());
             cycleStart = std::chrono::steady_clock::now();
