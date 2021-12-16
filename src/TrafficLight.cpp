@@ -24,7 +24,8 @@ void MessageQueue<T>::send(T &&msg)
     // FP.4a : The method send should use the mechanisms std::lock_guard<std::mutex> 
     // as well as _condition.notify_one() to add a new message to the queue and afterwards send a notification.
     std::lock_guard<std::mutex> _lock(_mutex);
-    _queue.push_back(std::move(msg));
+    _queue.clear();
+    _queue.emplace_back(std::move(msg));
     _condition.notify_one();
 }
 
@@ -34,6 +35,8 @@ TrafficLight::TrafficLight()
 {
     _currentPhase = TrafficLightPhase::red;
 }
+
+TrafficLight::~TrafficLight() {}
 
 void TrafficLight::waitForGreen()
 {
@@ -65,13 +68,14 @@ void TrafficLight::simulate()
     threads.emplace_back(std::thread(&TrafficLight::cycleThroughPhases, this));
 }
 
+std::default_random_engine generator;
+std::uniform_int_distribution<int> distribution(4000,6000);
+auto dice = std::bind ( distribution, generator );
+
 // virtual function which is executed in a thread
 void TrafficLight::cycleThroughPhases()
 {
-    std::minstd_rand generator;
-    std::uniform_int_distribution<int> dist(4,6);
-    auto dice = std::bind ( dist, generator );
-    std::chrono::seconds cycleDuration(dice());
+    std::chrono::milliseconds cycleDuration(dice());
     std::chrono::milliseconds delta;
 
     std::chrono::time_point<std::chrono::steady_clock> cycleStart = std::chrono::steady_clock::now();
@@ -86,7 +90,7 @@ void TrafficLight::cycleThroughPhases()
         currentTime = std::chrono::steady_clock::now();
         delta = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - cycleStart);
         if (delta >= cycleDuration)
-        {            
+        {
             if (getCurrentPhase() == TrafficLightPhase::green)
             {
                 _currentPhase = TrafficLightPhase::red;
@@ -96,7 +100,7 @@ void TrafficLight::cycleThroughPhases()
                 _currentPhase = TrafficLightPhase::green;
             }
             _queue.send(std::move(_currentPhase));
-            cycleDuration = std::chrono::seconds(dice());
+            cycleDuration = std::chrono::milliseconds(dice());
             cycleStart = std::chrono::steady_clock::now();
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
